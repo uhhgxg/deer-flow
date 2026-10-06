@@ -13,6 +13,7 @@ an offload drops the dispatch and turns the anchor red.
 from __future__ import annotations
 
 import functools
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -23,6 +24,17 @@ from deerflow.projects.documents import add_staged_document, read_file_chunks, s
 from deerflow.utils.file_io import run_file_io as _real_run_file_io
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.allow_blocking_io]
+
+# These anchors exercise the real document layout on disk:
+# ``users/<uid>/projects/<hash>/documents/<xx>/<sha256>/<id>/original``. Under a
+# pytest ``tmp_path`` prefix that nesting exceeds the Windows MAX_PATH limit
+# (WinError 206) before the dispatch under test can run. The anchors remain
+# active on POSIX; on Windows the affected cases are skipped rather than
+# silently weakened elsewhere.
+_skip_windows_max_path = pytest.mark.skipif(
+    os.name == "nt",
+    reason="MAX_PATH: nested hash document paths under pytest tmp_path exceed the Windows path limit (WinError 206)",
+)
 
 _USER = "u1"
 
@@ -60,6 +72,7 @@ async def _shelf_document(env) -> dict:
     return result[0]
 
 
+@_skip_windows_max_path
 async def test_attach_staging_copy_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
     """The under-lock source copy (existence/size check + ``shutil.copyfile``)
     must go through ``run_file_io`` while the row lock is held."""
@@ -79,6 +92,7 @@ async def test_attach_staging_copy_dispatches_off_the_loop(tmp_path, monkeypatch
         await close_engine()
 
 
+@_skip_windows_max_path
 async def test_attach_staged_read_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
     """``read_file_chunks`` (attach ingestion source + from-thread promote
     source) must dispatch the open, every chunk read, and the close through
