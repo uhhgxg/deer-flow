@@ -11,6 +11,7 @@ anchor red (mutation-verified style of this suite).
 from __future__ import annotations
 
 import functools
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -22,6 +23,17 @@ from deerflow.projects.trash import make_purge_file_remover, purge_all_trashed, 
 from deerflow.utils.file_io import run_file_io as _real_run_file_io
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.allow_blocking_io]
+
+# These anchors exercise the real document layout on disk:
+# ``users/<uid>/projects/<hash>/documents/<xx>/<sha256>/<id>/original``. Under a
+# pytest ``tmp_path`` prefix that nesting exceeds the Windows MAX_PATH limit
+# (WinError 206) before the dispatch under test can run. The anchors remain
+# active on POSIX; on Windows the affected cases are skipped rather than
+# silently weakened elsewhere.
+_skip_windows_max_path = pytest.mark.skipif(
+    os.name == "nt",
+    reason="MAX_PATH: nested hash document paths under pytest tmp_path exceed the Windows path limit (WinError 206)",
+)
 
 _USER = "u1"
 
@@ -61,6 +73,7 @@ async def _add(env: SimpleNamespace, *, name: str, data: bytes) -> dict:
     return result[0]
 
 
+@_skip_windows_max_path
 async def test_purge_unlink_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
     """The original + ``derived/converted.md`` unlink (``_unlink_document_files``)
     runs through the offload, inside the purge transaction's row lock."""
@@ -83,6 +96,7 @@ async def test_purge_unlink_dispatches_off_the_loop(tmp_path, monkeypatch) -> No
         await close_engine()
 
 
+@_skip_windows_max_path
 async def test_empty_trash_unlink_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
     """Empty trash (``purge_all_trashed``) removes every row's files through the
     same offload as the single purge — one dispatch per trashed row."""
@@ -102,6 +116,7 @@ async def test_empty_trash_unlink_dispatches_off_the_loop(tmp_path, monkeypatch)
         await close_engine()
 
 
+@_skip_windows_max_path
 async def test_restore_content_checks_dispatch_off_the_loop(tmp_path, monkeypatch) -> None:
     """Restore's original existence/size check (``_content_intact``) runs
     through the offload, under the document lock."""
@@ -121,6 +136,7 @@ async def test_restore_content_checks_dispatch_off_the_loop(tmp_path, monkeypatc
         await close_engine()
 
 
+@_skip_windows_max_path
 async def test_merge_cleanup_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
     """The post-commit merge cleanup (``_remove_namespace_tree``) runs through
     the offload."""
@@ -141,6 +157,7 @@ async def test_merge_cleanup_dispatches_off_the_loop(tmp_path, monkeypatch) -> N
         await close_engine()
 
 
+@_skip_windows_max_path
 async def test_sweep_reconciliation_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
     """Both sweep reconciliation passes (``_reconcile_storage`` /
     ``_reconcile_rows``) run through the offload — the sweep walks the user's
