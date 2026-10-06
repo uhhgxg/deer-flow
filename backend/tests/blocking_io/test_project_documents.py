@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -33,6 +34,17 @@ from deerflow.runtime.context_keys import PROJECT_CONTEXT_KEY
 from deerflow.utils.file_io import run_file_io as _real_run_file_io
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.allow_blocking_io]
+# These anchors exercise the real document layout on disk:
+# ``users/<uid>/projects/<hash>/documents/<xx>/<sha256>/<id>/original``. Under a
+# pytest ``tmp_path`` prefix that nesting exceeds the Windows MAX_PATH limit
+# (WinError 206) before the dispatch under test can run. The anchors remain
+# active on POSIX; on Windows the affected cases are skipped rather than
+# silently weakened elsewhere.
+_skip_windows_max_path = pytest.mark.skipif(
+    os.name == "nt",
+    reason="MAX_PATH: nested hash document paths under pytest tmp_path exceed the Windows path limit (WinError 206)",
+)
+
 
 _USER = "u1"
 
@@ -67,6 +79,7 @@ def _runtime(project_id: str) -> SimpleNamespace:
     return SimpleNamespace(context={"user_id": _USER, PROJECT_CONTEXT_KEY: {"project_id": project_id, "name": "P", "instructions": ""}})
 
 
+@_skip_windows_max_path
 async def test_upload_staging_and_rename_dispatch_off_the_loop(tmp_path, monkeypatch) -> None:
     """Staging spool (``_open_staging``/chunk writes) and the file-before-row
     atomic rename (``_place_staging``) must go through ``run_file_io``."""
@@ -93,6 +106,7 @@ async def test_upload_staging_and_rename_dispatch_off_the_loop(tmp_path, monkeyp
         await close_engine()
 
 
+@_skip_windows_max_path
 async def test_list_content_missing_check_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
     """The shelf list's batched original integrity check (``_content_intact_batch``,
     one pass for the whole page) must go through ``run_file_io``."""
@@ -123,6 +137,7 @@ async def test_list_content_missing_check_dispatches_off_the_loop(tmp_path, monk
         await close_engine()
 
 
+@_skip_windows_max_path
 async def test_dedup_hit_staging_cleanup_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
     """The dedup-hit branch removes the staged duplicate via the offload."""
     calls = _spy_offload(monkeypatch)
@@ -142,6 +157,7 @@ async def test_dedup_hit_staging_cleanup_dispatches_off_the_loop(tmp_path, monke
         await close_engine()
 
 
+@_skip_windows_max_path
 async def test_tool_read_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
     """The original integrity check (``_content_intact``), text detection
     (``is_text_file_by_content``), the windowed content read
@@ -165,6 +181,7 @@ async def test_tool_read_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
         await close_engine()
 
 
+@_skip_windows_max_path
 async def test_conversion_publish_path_dispatches_off_the_loop(tmp_path, monkeypatch) -> None:
     """First read of a convertible document validates the original
     (``_content_intact``), converts into ``.staging/`` (``_convert_to_staging``,
